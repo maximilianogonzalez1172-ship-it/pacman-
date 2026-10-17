@@ -1,0 +1,39 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Pac-Man Arcade</title><style>
+*{box-sizing:border-box}body{margin:0;background:#080b1b;color:#f7f4e9;font-family:system-ui,Arial,sans-serif;display:flex;justify-content:center;min-height:100vh}main{width:min(96vw,700px);text-align:center;padding:18px}h1{color:#ffdb36;letter-spacing:.14em;text-shadow:0 0 20px #f6a800;font-size:clamp(25px,5vw,44px);margin:8px}header{display:flex;justify-content:space-around;gap:8px;flex-wrap:wrap;margin:12px 0;font-weight:800}header span{color:#ffdb36}canvas{display:block;width:min(100%,504px);height:auto;margin:auto;background:#03030c;border:3px solid #3156ee;border-radius:9px;box-shadow:0 0 25px #233ce555;touch-action:none}button{background:#ffdb36;color:#111327;border:0;border-radius:10px;padding:12px 20px;font-weight:800;cursor:pointer;margin:12px 4px}button:hover{background:#ffe980}.hint{opacity:.75;font-size:14px}.pad{display:grid;grid-template-columns:repeat(3,55px);justify-content:center;gap:5px;margin:8px auto}.pad button{margin:0;padding:12px}.pad .up{grid-column:2}.pad .left{grid-column:1}.pad .down{grid-column:2}.pad .right{grid-column:3;grid-row:2}</style></head><body><main><h1>PAC-MAN</h1><header><div>PUNTOS <span id="score">0</span></div><div>VIDAS <span id="lives">3</span></div><div>NIVEL <span id="level">1</span></div><div>RÉCORD <span id="best">0</span></div></header><canvas id="game" width="504" height="504"></canvas><div><button id="start">INICIAR / REINICIAR</button><button id="pause">PAUSA</button></div><div class="pad"><button class="up" data-dir="up">▲</button><button class="left" data-dir="left">◀</button><button class="down" data-dir="down">▼</button><button class="right" data-dir="right">▶</button></div><p class="hint">Flechas o WASD para moverte · Espacio para pausar · Come todos los puntos</p></main><script>
+const raw=[
+'#####################',
+'#.........#.........#',
+'#.###.###.#.###.###.#',
+'#o###.###.#.###.###o#',
+'#...................#',
+'#.###.#.#####.#.###.#',
+'#.....#...#...#.....#',
+'#####.###.#.###.#####',
+'#####.#.......#.#####',
+'#####.#.##.##.#.#####',
+'#......... .........#',
+'#####.#.##.##.#.#####',
+'#####.#.......#.#####',
+'#####.#.#####.#.#####',
+'#.........#.........#',
+'#.###.###.#.###.###.#',
+'#o..#..... .....#..o#',
+'###.#.#.#####.#.#.###',
+'#.....#...#...#.....#',
+'#.#######.#.#######.#',
+'#...................#',
+];
+const canvas=document.querySelector('canvas'),ctx=canvas.getContext('2d'),T=24,dirs={left:[-1,0],right:[1,0],up:[0,-1],down:[0,1]},colors=['#ff515a','#ffb5dc','#57e8ff','#ffb34c'];let map,player,ghosts,score=0,lives=3,level=1,best=Number(localStorage.getItem('pacbest')||0),remaining=0,active=false,paused=false,powerUntil=0,last=0,acc=0,frame=0,message='PRESIONA INICIAR';document.querySelector('#best').textContent=best;
+function resetMap(){map=raw.map(r=>r.split(''));remaining=0;for(let y=0;y<21;y++)for(let x=0;x<21;x++)if(map[y][x]==='.'||map[y][x]==='o')remaining++;resetActors()}
+function resetActors(){player={x:10,y:16,dir:'left',next:'left'};ghosts=[[9,10],[11,10],[10,8],[10,12]].map(([x,y],i)=>({x,y,dir:i%2?'right':'left',homeX:x,homeY:y}));powerUntil=0;map[16][10]=' ';map[10][10]=' '}
+function updateHud(){document.querySelector('#score').textContent=score;document.querySelector('#lives').textContent=lives;document.querySelector('#level').textContent=level;document.querySelector('#best').textContent=best}
+function start(){score=0;lives=3;level=1;active=true;paused=false;message='';resetMap();updateHud();last=performance.now();acc=0}
+function walkable(x,y){return y>=0&&y<21&&x>=0&&x<21&&map[y][x]!=='#'}
+function step(o,d){let [dx,dy]=dirs[d];if(walkable(o.x+dx,o.y+dy)){o.x+=dx;o.y+=dy;o.dir=d;return true}return false}
+function collision(){for(const g of ghosts){if(g.x!==player.x||g.y!==player.y)continue;if(performance.now()<powerUntil){score+=200;g.x=g.homeX;g.y=g.homeY;updateHud()}else{lives--;updateHud();if(lives<=0){active=false;message='FIN DEL JUEGO'}else{resetActors();message='¡CUIDADO!';setTimeout(()=>{if(active)message=''},750)}return true}}return false}
+function tick(now){if(!active||paused)return;step(player,player.next)||step(player,player.dir);let c=map[player.y][player.x];if(c==='.'||c==='o'){score+=c==='o'?50:10;remaining--;map[player.y][player.x]=' ';if(c==='o')powerUntil=now+7000;if(score>best){best=score;localStorage.setItem('pacbest',best)}updateHud()}if(collision())return;if(remaining<=0){level++;resetMap();updateHud();message='NIVEL '+level;setTimeout(()=>{if(active)message=''},900);return}for(const g of ghosts){if(Math.random()<.22)continue;let options=Object.keys(dirs).filter(d=>walkable(g.x+dirs[d][0],g.y+dirs[d][1]));let reverse={left:'right',right:'left',up:'down',down:'up'}[g.dir];let choices=options.filter(d=>d!==reverse);if(!choices.length)choices=options;if(!choices.length)continue;let frightened=now<powerUntil;choices.sort((a,b)=>{let da=Math.abs(g.x+dirs[a][0]-player.x)+Math.abs(g.y+dirs[a][1]-player.y),db=Math.abs(g.x+dirs[b][0]-player.x)+Math.abs(g.y+dirs[b][1]-player.y);return frightened?db-da:da-db});let d=Math.random()<(.65+Math.min(level*.025,.2))?choices[0]:choices[Math.floor(Math.random()*choices.length)];step(g,d);if(collision())return}}
+function draw(now){ctx.fillStyle='#03030c';ctx.fillRect(0,0,504,504);for(let y=0;y<21;y++)for(let x=0;x<21;x++){let c=map[y][x],cx=x*T+12,cy=y*T+12;if(c==='#'){ctx.fillStyle='#142ca0';ctx.fillRect(x*T+1,y*T+1,22,22);ctx.strokeStyle='#5578ff';ctx.lineWidth=1.3;ctx.strokeRect(x*T+3,y*T+3,18,18)}else if(c==='.'||c==='o'){ctx.beginPath();ctx.arc(cx,cy,c==='o'?5+Math.sin(now/180)*1.2:2.3,0,Math.PI*2);ctx.fillStyle=c==='o'?'#ffcfac':'#ffe6a2';ctx.fill()}}
+let angle={right:0,down:Math.PI/2,left:Math.PI,up:-Math.PI/2}[player.dir],mouth=.14+Math.abs(Math.sin(now/110))*.35;ctx.fillStyle='#ffe12d';ctx.beginPath();ctx.moveTo(player.x*T+12,player.y*T+12);ctx.arc(player.x*T+12,player.y*T+12,10,angle+mouth,angle+Math.PI*2-mouth);ctx.closePath();ctx.fill();ghosts.forEach((g,i)=>{let x=g.x*T+12,y=g.y*T+12;ctx.fillStyle=now<powerUntil?'#344eff':colors[i];ctx.beginPath();ctx.arc(x,y-2,10,Math.PI,0);ctx.lineTo(x+10,y+9);for(let k=0;k<4;k++){ctx.lineTo(x+7-k*5,y+((k%2)?5:9))}ctx.lineTo(x-10,y-2);ctx.fill();ctx.fillStyle='white';ctx.beginPath();ctx.ellipse(x-4,y-2,3,4,0,0,7);ctx.ellipse(x+4,y-2,3,4,0,0,7);ctx.fill();ctx.fillStyle='#111e7e';ctx.beginPath();ctx.arc(x-4,y-1,1.5,0,7);ctx.arc(x+4,y-1,1.5,0,7);ctx.fill()});if(!active||paused||message){ctx.fillStyle='#020615cc';ctx.fillRect(30,208,444,88);ctx.fillStyle='#ffe12d';ctx.font='bold 24px system-ui';ctx.textAlign='center';ctx.fillText(paused?'PAUSA':message||'PAC-MAN',252,260)}}
+function loop(now){let delta=Math.min(now-last,100);last=now;if(active&&!paused){acc+=delta;let delay=Math.max(95,185-level*9);while(acc>=delay){tick(now);acc-=delay}}draw(now);requestAnimationFrame(loop)}
+function setDir(d){if(dirs[d])player.next=d}document.addEventListener('keydown',e=>{let k={ArrowLeft:'left',ArrowRight:'right',ArrowUp:'up',ArrowDown:'down',a:'left',d:'right',w:'up',s:'down'}[e.key];if(k){e.preventDefault();setDir(k)}if(e.code==='Space'){e.preventDefault();paused=!paused}});document.querySelectorAll('[data-dir]').forEach(b=>b.addEventListener('pointerdown',e=>{e.preventDefault();setDir(b.dataset.dir)}));document.querySelector('#start').onclick=start;document.querySelector('#pause').onclick=()=>{if(active)paused=!paused};resetMap();requestAnimationFrame(loop);
+</script></body></html>
